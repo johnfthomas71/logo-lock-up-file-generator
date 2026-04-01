@@ -1,39 +1,46 @@
 import streamlit as st
 from rembg import remove
-from PIL import Image
+from PIL import Image, ImageOps, ImageFilter
 import io
 
 def process_logo(uploaded_file):
     # 1. Load Image
-    img = Image.open(uploaded_file).convert("RGBA")
+    original = Image.open(uploaded_file).convert("RGBA")
     
-    # 2. AI Background Removal 
-    # This identifies the "shape" regardless of background color
-    no_bg = remove(img)
+    # 2. Create a high-contrast silhouette for the AI
+    # We turn it grayscale and then force it to be very high contrast
+    # This helps the AI see the "mass" of the logo, not the colors
+    silhouette = original.convert("L")
+    silhouette = ImageOps.autocontrast(silhouette)
+    # Thresholding: anything not white becomes black
+    silhouette = silhouette.point(lambda p: 0 if p < 250 else 255)
+    silhouette = silhouette.convert("RGBA")
     
-    # 3. Trim to artwork edges
-    bbox = no_bg.getbbox()
+    # 3. AI Background Removal on the silhouette
+    mask_img = remove(silhouette)
+    
+    # 4. Extract the mask (the alpha channel)
+    mask = mask_img.split()[3]
+    
+    # 5. Smooth the mask slightly to fix "jagged" edges
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=0.5))
+    
+    # 6. Create the Solid White Logo
+    # We create a new white image and apply the smooth mask
+    white_logo = Image.new("RGBA", original.size, (255, 255, 255, 255))
+    white_logo.putalpha(mask)
+    
+    # 7. Trim to artwork edges
+    bbox = white_logo.getbbox()
     if bbox:
-        no_bg = no_bg.crop(bbox)
-    
-    # 4. THE FIX: Solidify and Whiten
-    # We extract the 'Alpha' (the transparency mask the AI created)
-    r, g, b, alpha = no_bg.split()
-    
-    # "Binary Threshold": If the AI says a pixel is even 5% logo, 
-    # we make it 100% solid logo. This fills the 'hollow' Verizon letters.
-    alpha = alpha.point(lambda p: 255 if p > 10 else 0)
-    
-    # Create a brand new solid white image and apply our solid mask
-    white_logo = Image.new("RGBA", no_bg.size, (255, 255, 255, 255))
-    white_logo.putalpha(alpha)
-    
+        white_logo = white_logo.crop(bbox)
+        
     return white_logo
 
 # --- UI SETUP ---
 st.set_page_config(page_title="Logo Lockup Tool", layout="centered")
 st.title("🏗️ Pro Logo Lockup Generator")
-st.write("Automatically removes backgrounds and creates solid white lockups.")
+st.write("Optimized for solid logos (like Verizon and MongoDB).")
 
 # --- STEP 1: NAMES ---
 st.subheader("1. Company Names")
@@ -53,7 +60,7 @@ with u_col2:
 
 # --- STEP 3: PROCESSING ---
 if file1 and file2:
-    with st.spinner("Analyzing shapes and solidifying white..."):
+    with st.spinner("Building silhouettes and aligning..."):
         try:
             logo_a = process_logo(file1)
             logo_b = process_logo(file2)
