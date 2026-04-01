@@ -1,79 +1,74 @@
 import streamlit as st
 from rembg import remove
-from PIL import Image, ImageOps
+from PIL import Image
 import io
 
 def process_logo(uploaded_file):
-    # 1. Load and Remove Background
     img = Image.open(uploaded_file).convert("RGBA")
     no_bg = remove(img)
-    
-    # 2. Trim empty space (Crucial for 15px spacing/2px padding accuracy)
-    # This crops the image to the actual pixels of the logo
+    # Trim to artwork edges to ensure 15px spacing is accurate
     bbox = no_bg.getbbox()
     if bbox:
         no_bg = no_bg.crop(bbox)
-    
-    # 3. Convert to Pure White
+    # Force all non-transparent pixels to White
     r, g, b, a = no_bg.split()
-    white_logo = Image.merge("RGBA", (
-        r.point(lambda _: 255), 
-        g.point(lambda _: 255), 
-        b.point(lambda _: 255), 
-        a
-    ))
+    white_logo = Image.merge("RGBA", (r.point(lambda _: 255), g.point(lambda _: 255), b.point(lambda _: 255), a))
     return white_logo
 
-st.title("Pro Logo Lockup Tool")
-st.write("Upload two logos to create a perfectly aligned, white-on-transparent composite.")
+st.set_page_config(page_title="Logo Lockup Tool", layout="centered")
+st.title("🏗️ Logo Lockup Generator")
+st.write("Upload logos, name the companies, and download your white-on-transparent lockup.")
 
-file1 = st.file_uploader("Upload Left Logo", type=["png", "jpg", "jpeg"])
-file2 = st.file_uploader("Upload Right Logo", type=["png", "jpg", "jpeg"])
+# --- STEP 1: Company Names for File Naming ---
+st.subheader("1. Enter Company Names")
+col_n1, col_n2 = st.columns(2)
+with col_n1:
+    comp1 = st.text_input("First Company Name", placeholder="e.g. MongoDB")
+with col_n2:
+    comp2 = st.text_input("Second Company Name", placeholder="e.g. PwC")
 
-if file1 and file2:
-    # Process both logos
-    logo_a = process_logo(file1)
-    logo_b = process_logo(file2)
-    
-    # --- LOGIC: AS CLOSE TO SAME HEIGHT AS POSSIBLE ---
-    # We find the smaller height of the two and scale the larger one down 
-    # to match it, ensuring no quality loss from upscaling.
-    target_height = min(logo_a.height, logo_b.height)
-    
-    def resize_to_height(img, height):
-        aspect_ratio = img.width / img.height
-        new_width = int(height * aspect_ratio)
-        return img.resize((new_width, height), Image.Resampling.LANCZOS)
+# --- STEP 2: Upload Files ---
+st.subheader("2. Upload Logos")
+col1, col2 = st.columns(2)
+with col1:
+    file1 = st.file_uploader("Left Logo File", type=["png", "jpg", "jpeg"])
+with col2:
+    file2 = st.file_uploader("Right Logo File", type=["png", "jpg", "jpeg"])
 
-    logo_a_resized = resize_to_height(logo_a, target_height)
-    logo_b_resized = resize_to_height(logo_b, target_height)
+if file1 and file2 and comp1 and comp2:
+    # Process logos
+    l_logo = process_logo(file1)
+    r_logo = process_logo(file2)
     
-    # --- LOGIC: SPACING AND PADDING ---
-    spacing = 15
-    padding_y = 2  # 2px top, 2px bottom
+    # Scale to match height (using the shorter logo as the master height)
+    h = min(l_logo.height, r_logo.height)
+    l_res = l_logo.resize((int(h * (l_logo.width/l_logo.height)), h), Image.Resampling.LANCZOS)
+    r_res = r_logo.resize((int(h * (r_logo.width/r_logo.height)), h), Image.Resampling.LANCZOS)
     
-    total_width = logo_a_resized.width + spacing + logo_b_resized.width
-    total_height = target_height + (padding_y * 2)
+    # Create Canvas (15px spacing, 2px padding top/bottom)
+    canvas = Image.new("RGBA", (l_res.width + 15 + r_res.width, h + 4), (0,0,0,0))
+    canvas.paste(l_res, (0, 2), l_res)
+    canvas.paste(r_res, (l_res.width + 15, 2), r_res)
     
-    # Create the final transparent canvas
-    canvas = Image.new("RGBA", (total_width, total_height), (0, 0, 0, 0))
+    st.markdown("### Preview")
+    # Wrap in a container to see white logo against dark UI background
+    st.container(border=True).image(canvas)
     
-    # --- LOGIC: ALIGNMENT ---
-    # Since they are the same height now, the 'y' coordinate is simply the top padding
-    # This effectively aligns them by their horizontal middle.
-    canvas.paste(logo_a_resized, (0, padding_y), logo_a_resized)
-    canvas.paste(logo_b_resized, (logo_a_resized.width + spacing, padding_y), logo_b_resized)
+    # Format the filename according to your convention
+    # Example: mongodb_pwc_logo_lockup.png
+    clean_n1 = comp1.lower().replace(" ", "_")
+    clean_n2 = comp2.lower().replace(" ", "_")
+    final_filename = f"{clean_n1}_{clean_n2}_logo_lockup.png"
     
-    # Display over a dark background in Streamlit so the white is visible
-    st.markdown("### Preview (Against Dark Background)")
-    st.container(border=True).image(canvas, use_container_width=False)
-    
-    # Download Button
     buf = io.BytesIO()
     canvas.save(buf, format="PNG")
+    
     st.download_button(
-        label="Download Combined PNG",
-        data=buf.getvalue(),
-        file_name="corporate_lockup_white.png",
+        label=f"Download {final_filename}", 
+        data=buf.getvalue(), 
+        file_name=final_filename, 
         mime="image/png"
     )
+else:
+    if (file1 or file2) and not (comp1 and comp2):
+        st.info("Please enter both company names to enable the download.")
