@@ -62,7 +62,7 @@ col_n1, col_n2 = st.columns(2)
 with col_n1:
     comp1 = st.text_input("Left Company", value="MongoDB")
 with col_n2:
-    comp2 = st.text_input("Right Company", value="Verizon")
+    comp2 = st.text_input("Right Company", value="Company Name")
 
 # --- STEP 2: UPLOADS ---
 st.subheader("2. Upload Logos")
