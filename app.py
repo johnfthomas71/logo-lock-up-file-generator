@@ -90,12 +90,16 @@ if file1 and file2:
             r_f = scale(logo_b, target_h)
 
             # Canvas (15px spacing, 2px vertical padding)
-            canvas_w = l_f.width + 15 + r_f.width
+            canvas_w = l_f.width + 20 + r_f.width
             canvas_h = target_h + 4
             canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
 
-            canvas.paste(l_f, (0, 2), l_f)
-            canvas.paste(r_f, (l_f.width + 15, 2), r_f)
+            # Offset the right logo a bit lower for better baseline alignment
+            LEFT_Y_OFFSET = 2
+            RIGHT_Y_OFFSET = 6  # Increase this until visual bottoms align
+
+            canvas.paste(l_f, (0, LEFT_Y_OFFSET), l_f)
+            canvas.paste(r_f, (l_f.width + 15, RIGHT_Y_OFFSET), r_f)
 
         st.markdown("### Final Preview")
         st.container(border=True).image(canvas)
