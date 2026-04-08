@@ -1,0 +1,16 @@
+# After trimming/cropping inside process_logo_pro, you'll get logo_a and logo_b
+
+# 1. Get visible heights
+h_a = logo_a.height
+h_b = logo_b.height
+
+# 2. Target artwork height (max of the two for maximum visibility)
+target_h = max(h_a, h_b)
+
+def scale_to_height(img: Image.Image, h: int) -> Image.Image:
+    aspect = img.width / img.height
+    return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
+
+# 3. Scale both
+l_f = scale_to_height(logo_a, target_h)
+r_f = scale_to_height(logo_b, target_h)

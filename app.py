@@ -72,9 +72,30 @@ with u1:
 with u2:
     file2 = st.file_uploader("Upload Right Logo", type=["png", "jpg", "jpeg"], key="r")
 
-# --- STEP 3: PROCESSING ---
-from PIL import Image
+# --- STEP 3: CONTROLS FOR SIZE & SPACING ---
+st.subheader("3. Layout Controls")
 
+col_c1, col_c2 = st.columns(2)
+with col_c1:
+    right_shrink_px = st.slider(
+        "Shrink right logo height (pixels)",
+        min_value=0,
+        max_value=100,     # increase if you want a larger adjustment range
+        value=0,
+        step=1,
+        help="Use this to make the right logo visually smaller relative to the left, in 1-pixel increments.",
+    )
+with col_c2:
+    spacing_px = st.slider(
+        "Horizontal spacing between logos (pixels)",
+        min_value=0,
+        max_value=100,
+        value=15,
+        step=1,
+        help="Adjust the gap between the left and right logos.",
+    )
+
+# --- STEP 4: PROCESSING ---
 def scale_to_height(img: Image.Image, h: int) -> Image.Image:
     aspect = img.width / img.height
     return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
@@ -97,26 +118,30 @@ if file1 and file2:
             logo_a = process_logo_pro(file1)
             logo_b = process_logo_pro(file2)
 
-            # --- Scale both logos to the same max artwork height ---
-            target_artwork_h = max(logo_a.height, logo_b.height)
+            # Base artwork height from original logos
+            base_artwork_h = max(logo_a.height, logo_b.height)
 
-            l_scaled = scale_to_height(logo_a, target_artwork_h)
-            r_scaled = scale_to_height(logo_b, target_artwork_h)
+            # Left logo stays at full base height
+            l_scaled = scale_to_height(logo_a, base_artwork_h)
 
-            # --- Add consistent top/bottom padding for a uniform canvas ---
-            PAD_PIXELS = 6  # You can adjust padding as needed
-            final_height = target_artwork_h + 2 * PAD_PIXELS
+            # Right logo can be shrunk by N pixels (but never below 1px)
+            r_target_h = max(1, base_artwork_h - right_shrink_px)
+            r_scaled = scale_to_height(logo_b, r_target_h)
+
+            # Final canvas height = max of scaled heights + padding
+            PAD_PIXELS = 6
+            final_height = max(l_scaled.height, r_scaled.height) + 2 * PAD_PIXELS
 
             l_final = pad_image(l_scaled, final_height)
             r_final = pad_image(r_scaled, final_height)
 
-            # Canvas (15px horizontal spacing)
-            canvas_w = l_final.width + 15 + r_final.width
+            # Canvas with adjustable horizontal spacing
+            canvas_w = l_final.width + spacing_px + r_final.width
             canvas_h = final_height
             canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
 
             canvas.paste(l_final, (0, 0), l_final)
-            canvas.paste(r_final, (l_final.width + 15, 0), r_final)
+            canvas.paste(r_final, (l_final.width + spacing_px, 0), r_final)
 
         st.markdown("### Final Preview")
         st.container(border=True).image(canvas)
