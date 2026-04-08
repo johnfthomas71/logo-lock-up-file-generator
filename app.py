@@ -73,33 +73,50 @@ with u2:
     file2 = st.file_uploader("Upload Right Logo", type=["png", "jpg", "jpeg"], key="r")
 
 # --- STEP 3: PROCESSING ---
+from PIL import Image
+
+def scale_to_height(img: Image.Image, h: int) -> Image.Image:
+    aspect = img.width / img.height
+    return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
+
+def pad_image(img: Image.Image, target_height: int, pad_color=(0, 0, 0, 0)) -> Image.Image:
+    """Pad image vertically to target height, centering the content."""
+    w, h = img.size
+    if h >= target_height:
+        return img
+    pad_total = target_height - h
+    pad_top = pad_total // 2
+    pad_bottom = pad_total - pad_top
+    new_img = Image.new("RGBA", (w, target_height), pad_color)
+    new_img.paste(img, (0, pad_top), img)
+    return new_img
+
 if file1 and file2:
     try:
         with st.spinner("Processing logos and building lockup…"):
             logo_a = process_logo_pro(file1)
             logo_b = process_logo_pro(file2)
 
-            # Match heights
-            target_h = min(logo_a.height, logo_b.height)
+            # --- Scale both logos to the same max artwork height ---
+            target_artwork_h = max(logo_a.height, logo_b.height)
 
-            def scale(img: Image.Image, h: int) -> Image.Image:
-                aspect = img.width / img.height
-                return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
+            l_scaled = scale_to_height(logo_a, target_artwork_h)
+            r_scaled = scale_to_height(logo_b, target_artwork_h)
 
-            l_f = scale(logo_a, target_h)
-            r_f = scale(logo_b, target_h)
+            # --- Add consistent top/bottom padding for a uniform canvas ---
+            PAD_PIXELS = 6  # You can adjust padding as needed
+            final_height = target_artwork_h + 2 * PAD_PIXELS
 
-            # Canvas (15px spacing, 2px vertical padding)
-            canvas_w = l_f.width + 20 + r_f.width
-            canvas_h = target_h + 4
+            l_final = pad_image(l_scaled, final_height)
+            r_final = pad_image(r_scaled, final_height)
+
+            # Canvas (15px horizontal spacing)
+            canvas_w = l_final.width + 15 + r_final.width
+            canvas_h = final_height
             canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
 
-            # Offset the right logo a bit lower for better baseline alignment
-            LEFT_Y_OFFSET = 2
-            RIGHT_Y_OFFSET = 6  # Increase this until visual bottoms align
-
-            canvas.paste(l_f, (0, LEFT_Y_OFFSET), l_f)
-            canvas.paste(r_f, (l_f.width + 15, RIGHT_Y_OFFSET), r_f)
+            canvas.paste(l_final, (0, 0), l_final)
+            canvas.paste(r_final, (l_final.width + 15, 0), r_final)
 
         st.markdown("### Final Preview")
         st.container(border=True).image(canvas)
