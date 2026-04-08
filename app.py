@@ -72,34 +72,76 @@ with u1:
 with u2:
     file2 = st.file_uploader("Upload Right Logo", type=["png", "jpg", "jpeg"], key="r")
 
-# --- STEP 3: PROCESSING ---
+# --- STEP 3: CONTROLS FOR SIZE & SPACING ---
+st.subheader("3. Layout Controls")
+
+col_c1, col_c2 = st.columns(2)
+with col_c1:
+    right_shrink_px = st.slider(
+        "Shrink right logo height (pixels)",
+        min_value=0,
+        max_value=100,     # increase if you want a larger adjustment range
+        value=0,
+        step=1,
+        help="Use this to make the right logo visually smaller relative to the left, in 1-pixel increments.",
+    )
+with col_c2:
+    spacing_px = st.slider(
+        "Horizontal spacing between logos (pixels)",
+        min_value=0,
+        max_value=100,
+        value=15,
+        step=1,
+        help="Adjust the gap between the left and right logos.",
+    )
+
+# --- STEP 4: PROCESSING ---
+def scale_to_height(img: Image.Image, h: int) -> Image.Image:
+    aspect = img.width / img.height
+    return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
+
+def pad_image(img: Image.Image, target_height: int, pad_color=(0, 0, 0, 0)) -> Image.Image:
+    """Pad image vertically to target height, centering the content."""
+    w, h = img.size
+    if h >= target_height:
+        return img
+    pad_total = target_height - h
+    pad_top = pad_total // 2
+    pad_bottom = pad_total - pad_top
+    new_img = Image.new("RGBA", (w, target_height), pad_color)
+    new_img.paste(img, (0, pad_top), img)
+    return new_img
+
 if file1 and file2:
     try:
         with st.spinner("Processing logos and building lockup…"):
             logo_a = process_logo_pro(file1)
             logo_b = process_logo_pro(file2)
 
-            # Match heights
-            target_h = min(logo_a.height, logo_b.height)
+            # Base artwork height from original logos
+            base_artwork_h = max(logo_a.height, logo_b.height)
 
-            def scale(img: Image.Image, h: int) -> Image.Image:
-                aspect = img.width / img.height
-                return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
+            # Left logo stays at full base height
+            l_scaled = scale_to_height(logo_a, base_artwork_h)
 
-            l_f = scale(logo_a, target_h)
-            r_f = scale(logo_b, target_h)
+            # Right logo can be shrunk by N pixels (but never below 1px)
+            r_target_h = max(1, base_artwork_h - right_shrink_px)
+            r_scaled = scale_to_height(logo_b, r_target_h)
 
-            # Canvas (15px spacing, 2px vertical padding)
-            canvas_w = l_f.width + 20 + r_f.width
-            canvas_h = target_h + 4
+            # Final canvas height = max of scaled heights + padding
+            PAD_PIXELS = 6
+            final_height = max(l_scaled.height, r_scaled.height) + 2 * PAD_PIXELS
+
+            l_final = pad_image(l_scaled, final_height)
+            r_final = pad_image(r_scaled, final_height)
+
+            # Canvas with adjustable horizontal spacing
+            canvas_w = l_final.width + spacing_px + r_final.width
+            canvas_h = final_height
             canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
 
-            # Offset the right logo a bit lower for better baseline alignment
-            LEFT_Y_OFFSET = 2
-            RIGHT_Y_OFFSET = 6  # Increase this until visual bottoms align
-
-            canvas.paste(l_f, (0, LEFT_Y_OFFSET), l_f)
-            canvas.paste(r_f, (l_f.width + 15, RIGHT_Y_OFFSET), r_f)
+            canvas.paste(l_final, (0, 0), l_final)
+            canvas.paste(r_final, (l_final.width + spacing_px, 0), r_final)
 
         st.markdown("### Final Preview")
         st.container(border=True).image(canvas)
