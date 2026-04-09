@@ -80,18 +80,18 @@ with col_c1:
     right_shrink_px = st.slider(
         "Shrink right logo height (pixels)",
         min_value=0,
-        max_value=300,     # increase if you want a larger adjustment range
+        max_value=400,     # increase if you want a larger adjustment range
         value=0,
-        step=1,
+        step=10,
         help="Use this to make the right logo visually smaller relative to the left, in 1-pixel increments.",
     )
 with col_c2:
     spacing_px = st.slider(
         "Horizontal spacing between logos (pixels)",
         min_value=0,
-        max_value=100,
-        value=15,
-        step=1,
+        max_value=300,
+        value=20,
+        step=10,
         help="Adjust the gap between the left and right logos.",
     )
 
