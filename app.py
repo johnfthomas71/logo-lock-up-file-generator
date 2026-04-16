@@ -80,22 +80,44 @@ with col_c1:
     right_shrink_px = st.slider(
         "Shrink right logo height (pixels)",
         min_value=0,
-        max_value=400,     # increased from 100
+        max_value=100,
         value=0,
-        step=10,           # increased from 1
-        help="Use this to make the right logo visually smaller relative to the left, in 10-pixel increments.",
+        step=1,
+        help="Use this to make the right logo visually smaller relative to the left, in 1-pixel increments.",
     )
 with col_c2:
     spacing_px = st.slider(
         "Horizontal spacing between logos (pixels)",
         min_value=0,
-        max_value=400,     # increased from 100
-        value=50,          # default aligned with step size
-        step=10,           # increased from 1
-        help="Adjust the gap between the left and right logos in 10-pixel increments.",
+        max_value=100,
+        value=15,
+        step=1,
+        help="Adjust the gap between the left and right logos.",
     )
 
-# --- STEP 4: PROCESSING ---
+# --- STEP 4: BACKGROUND SELECTION ---
+st.subheader("4. Background")
+
+bg_choice = st.radio(
+    "Background color",
+    (
+        "Black (#061621)",
+        "Green (#023430)",
+        "Transparent (#00000000)",
+    ),
+    index=0,
+    help="Choose the background. Logos remain pure white; the color fills only where there is no logo.",
+)
+
+# Map radio choice to RGBA color
+if bg_choice.startswith("Black"):
+    canvas_bg = (0x06, 0x16, 0x21, 255)     # #061621, fully opaque
+elif bg_choice.startswith("Green"):
+    canvas_bg = (0x02, 0x34, 0x30, 255)     # #023430, fully opaque
+else:
+    canvas_bg = (0x00, 0x00, 0x00, 0x00)    # #00000000, fully transparent
+
+# --- STEP 5: PROCESSING ---
 def scale_to_height(img: Image.Image, h: int) -> Image.Image:
     aspect = img.width / img.height
     return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
@@ -135,11 +157,12 @@ if file1 and file2:
             l_final = pad_image(l_scaled, final_height)
             r_final = pad_image(r_scaled, final_height)
 
-            # Canvas with adjustable horizontal spacing
+            # Canvas with chosen background color and adjustable horizontal spacing
             canvas_w = l_final.width + spacing_px + r_final.width
             canvas_h = final_height
-            canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+            canvas = Image.new("RGBA", (canvas_w, canvas_h), canvas_bg)
 
+            # Paste white logos using their alpha; background only shows where logos are transparent
             canvas.paste(l_final, (0, 0), l_final)
             canvas.paste(r_final, (l_final.width + spacing_px, 0), r_final)
 
