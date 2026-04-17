@@ -72,7 +72,7 @@ with u1:
 with u2:
     file2 = st.file_uploader("Upload Right Logo", type=["png", "jpg", "jpeg"], key="r")
 
-# --- STEP 3: CONTROLS FOR SIZE, SPACING & BACKGROUND ---
+# --- STEP 3: CONTROLS FOR SIZE & SPACING ---
 st.subheader("3. Layout Controls")
 
 col_c1, col_c2 = st.columns(2)
@@ -80,7 +80,7 @@ with col_c1:
     right_shrink_px = st.slider(
         "Shrink right logo height (pixels)",
         min_value=0,
-        max_value=100,     # increase if you want a larger adjustment range
+        max_value=100,
         value=0,
         step=1,
         help="Use this to make the right logo visually smaller relative to the left, in 1-pixel increments.",
@@ -95,26 +95,29 @@ with col_c2:
         help="Adjust the gap between the left and right logos.",
     )
 
-bg_choice = st.selectbox(
-    "Background",
+# --- STEP 4: BACKGROUND SELECTION ---
+st.subheader("4. Background")
+
+bg_choice = st.radio(
+    "Background color",
     (
-        "Transparent",
-        "#031e2b (dark teal)",
-        "#1a1a1a (dark gray)",
+        "Black (#061621)",
+        "Green (#023430)",
+        "Transparent (#00000000)",
     ),
     index=0,
-    help="Choose the background color for the exported PNG.",
+    help="Choose the background. Logos remain pure white; the color fills only where there is no logo.",
 )
 
-# Map dropdown choice to an RGBA background color
-if bg_choice.startswith("#031e2b"):
-    canvas_bg = (0x03, 0x1e, 0x2b, 255)   # solid dark teal
-elif bg_choice.startswith("#1a1a1a"):
-    canvas_bg = (0x1a, 0x1a, 0x1a, 255)   # solid dark gray
+# Map radio choice to RGBA color
+if bg_choice.startswith("Black"):
+    canvas_bg = (0x06, 0x16, 0x21, 255)     # #061621, fully opaque
+elif bg_choice.startswith("Green"):
+    canvas_bg = (0x02, 0x34, 0x30, 255)     # #023430, fully opaque
 else:
-    canvas_bg = (0, 0, 0, 0)              # fully transparent background
+    canvas_bg = (0x00, 0x00, 0x00, 0x00)    # #00000000, fully transparent
 
-# --- STEP 4: PROCESSING ---
+# --- STEP 5: PROCESSING ---
 def scale_to_height(img: Image.Image, h: int) -> Image.Image:
     aspect = img.width / img.height
     return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
@@ -154,11 +157,12 @@ if file1 and file2:
             l_final = pad_image(l_scaled, final_height)
             r_final = pad_image(r_scaled, final_height)
 
-            # Canvas with adjustable horizontal spacing and chosen background
+            # Canvas with chosen background color and adjustable horizontal spacing
             canvas_w = l_final.width + spacing_px + r_final.width
             canvas_h = final_height
             canvas = Image.new("RGBA", (canvas_w, canvas_h), canvas_bg)
 
+            # Paste white logos using their alpha; background only shows where logos are transparent
             canvas.paste(l_final, (0, 0), l_final)
             canvas.paste(r_final, (l_final.width + spacing_px, 0), r_final)
 
