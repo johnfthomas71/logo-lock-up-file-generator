@@ -109,13 +109,16 @@ bg_choice = st.radio(
     help="Choose the background. Logos remain pure white; the color fills only where there is no logo.",
 )
 
-# Map radio choice to RGBA color
+# Map radio choice to RGBA color AND label for filename/preview
 if bg_choice.startswith("Black"):
     canvas_bg = (0x06, 0x16, 0x21, 255)     # #061621, fully opaque
+    bg_label = "black"
 elif bg_choice.startswith("Green"):
     canvas_bg = (0x02, 0x34, 0x30, 255)     # #023430, fully opaque
+    bg_label = "green"
 else:
     canvas_bg = (0x00, 0x00, 0x00, 0x00)    # #00000000, fully transparent
+    bg_label = "transparent"
 
 # --- STEP 5: PROCESSING ---
 def scale_to_height(img: Image.Image, h: int) -> Image.Image:
@@ -166,13 +169,14 @@ if file1 and file2:
             canvas.paste(l_final, (0, 0), l_final)
             canvas.paste(r_final, (l_final.width + spacing_px, 0), r_final)
 
-        st.markdown("### Final Preview")
+        # Preview header reflects chosen background
+        st.markdown(f"### Final Preview – {bg_label.capitalize()} background")
         st.container(border=True).image(canvas)
 
-        # Filename
+        # Filename: include background label
         n1 = comp1.lower().replace(" ", "_")
         n2 = comp2.lower().replace(" ", "_")
-        fname = f"{n1}_{n2}_logo_lockup.png"
+        fname = f"{n1}_{n2}_{bg_label}_logo_lockup.png"
 
         buf = io.BytesIO()
         canvas.save(buf, format="PNG")
