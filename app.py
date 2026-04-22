@@ -19,7 +19,11 @@ def estimate_bg_color(img: Image.Image) -> tuple:
     a = sum(p[3] for p in samples) // len(samples)
     return (r, g, b, a)
 
-def process_logo_pro(uploaded_file) -> Image.Image:
+def process_logo_pro(uploaded_file, threshold: int):
+    """
+    Process a logo into a white-on-transparent image and return
+    both the processed logo and the binary mask used for extraction.
+    """
     # 1. Load image and ensure RGBA
     img = Image.open(uploaded_file).convert("RGBA")
 
@@ -32,9 +36,15 @@ def process_logo_pro(uploaded_file) -> Image.Image:
 
     # 4. Build luminance mask
     mask = diff.convert("L")
-    mask = mask.filter(ImageFilter.GaussianBlur(radius=1.0))
-    threshold = 16
+
+    # Light blur to smooth edges without flooding the background
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=0.3))
+
+    # Apply user-controlled threshold
     mask = mask.point(lambda p: 0 if p < threshold else 255)
+
+    # Keep a copy for debugging/preview
+    mask_preview = mask.copy()
 
     # 5. Combine with any existing alpha
     r, g, b, a = img.split()
@@ -48,13 +58,16 @@ def process_logo_pro(uploaded_file) -> Image.Image:
     bbox = combined_alpha.getbbox()
     if bbox:
         white_logo = white_logo.crop(bbox)
+        mask_preview = mask_preview.crop(bbox)
 
-    return white_logo
+    return white_logo, mask_preview
 
 # --- UI SETUP ---
 st.set_page_config(page_title="Logo Lockup Tool", layout="centered")
 st.title("🏗️ Professional Logo Lockup Generator")
-st.write("This version uses **luminance masking + alpha blending** to keep logos solid and sharp.")
+st.write(
+    "This version uses **luminance masking + alpha blending** to keep logos solid and sharp."
+)
 
 # --- STEP 1: NAMES ---
 st.subheader("1. Company Names")
@@ -68,9 +81,13 @@ with col_n2:
 st.subheader("2. Upload Logos")
 u1, u2 = st.columns(2)
 with u1:
-    file1 = st.file_uploader("Upload Left Logo", type=["png", "jpg", "jpeg"], key="l")
+    file1 = st.file_uploader(
+        "Upload Left Logo", type=["png", "jpg", "jpeg"], key="l"
+    )
 with u2:
-    file2 = st.file_uploader("Upload Right Logo", type=["png", "jpg", "jpeg"], key="r")
+    file2 = st.file_uploader(
+        "Upload Right Logo", type=["png", "jpg", "jpeg"], key="r"
+    )
 
 # --- STEP 3: CONTROLS FOR SIZE & SPACING ---
 st.subheader("3. Layout Controls")
@@ -83,14 +100,17 @@ with col_c1:
         max_value=150,
         value=0,
         step=1,
-        help="Use this to make the right logo visually smaller relative to the left, in 1-pixel increments.",
+        help=(
+            "Use this to make the right logo visually smaller relative to the left, "
+            "in 1-pixel increments."
+        ),
     )
 with col_c2:
     spacing_px = st.slider(
         "Horizontal spacing between logos (pixels)",
         min_value=0,
-        max_value=200,   # increased range
-        value=50,        # new default
+        max_value=200,
+        value=50,
         step=1,
         help="Adjust the gap between the left and right logos.",
     )
@@ -106,21 +126,52 @@ bg_choice = st.radio(
         "Transparent (#00000000)",
     ),
     index=0,
-    help="Choose the background. Logos remain pure white; the color fills only where there is no logo.",
+    help=(
+        "Choose the background. Logos remain pure white; the color fills only "
+        "where there is no logo."
+    ),
 )
 
 # Map radio choice to RGBA color AND label for filename/preview
 if bg_choice.startswith("Black"):
-    canvas_bg = (0x06, 0x16, 0x21, 255)     # #061621, fully opaque
+    canvas_bg = (0x06, 0x16, 0x21, 255)  # #061621, fully opaque
     bg_label = "black"
 elif bg_choice.startswith("Green"):
-    canvas_bg = (0x02, 0x34, 0x30, 255)     # #023430, fully opaque
+    canvas_bg = (0x02, 0x34, 0x30, 255)  # #023430, fully opaque
     bg_label = "green"
 else:
-    canvas_bg = (0x00, 0x00, 0x00, 0x00)    # #00000000, fully transparent
+    canvas_bg = (0x00, 0x00, 0x00, 0x00)  # #00000000, fully transparent
     bg_label = "transparent"
 
-# --- STEP 5: PROCESSING ---
+# --- STEP 5: FOREGROUND SENSITIVITY ---
+st.subheader("5. Extraction Sensitivity")
+st.markdown(
+    "Higher values keep fewer pixels (helps remove big white blocks); "
+    "lower values keep more (helps preserve faint edges)."
+)
+
+fg_threshold = st.slider(
+    "Foreground sensitivity (threshold)",
+    min_value=10,
+    max_value=80,
+    value=40,
+    step=1,
+    help=(
+        "Controls how different a pixel must be from the original background to be kept. "
+        "Increase this if you see a big white box; decrease if fine logo details disappear."
+    ),
+)
+
+show_masks = st.checkbox(
+    "Show extraction masks (debug view)",
+    value=False,
+    help=(
+        "When enabled, shows the binary masks used to cut the logos out of their "
+        "original backgrounds."
+    ),
+)
+
+# --- STEP 6: PROCESSING HELPERS ---
 def scale_to_height(img: Image.Image, h: int) -> Image.Image:
     aspect = img.width / img.height
     return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
@@ -137,11 +188,13 @@ def pad_image(img: Image.Image, target_height: int, pad_color=(0, 0, 0, 0)) -> I
     new_img.paste(img, (0, pad_top), img)
     return new_img
 
+# --- STEP 7: MAIN PIPELINE ---
 if file1 and file2:
     try:
         with st.spinner("Processing logos and building lockup…"):
-            logo_a = process_logo_pro(file1)
-            logo_b = process_logo_pro(file2)
+            # Use user-controlled threshold for both logos
+            logo_a, mask_a = process_logo_pro(file1, fg_threshold)
+            logo_b, mask_b = process_logo_pro(file2, fg_threshold)
 
             # Base artwork height from original logos
             base_artwork_h = max(logo_a.height, logo_b.height)
@@ -172,6 +225,15 @@ if file1 and file2:
         # Preview header reflects chosen background
         st.markdown(f"### Final Preview – {bg_label.capitalize()} background")
         st.container(border=True).image(canvas)
+
+        # Optional: show mask debug view
+        if show_masks:
+            st.subheader("Mask Debug View")
+            m1, m2 = st.columns(2)
+            with m1:
+                st.image(mask_a, caption="Left logo mask", use_column_width=True)
+            with m2:
+                st.image(mask_b, caption="Right logo mask", use_column_width=True)
 
         # Filename: include background label
         n1 = comp1.lower().replace(" ", "_")
