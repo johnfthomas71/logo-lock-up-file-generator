@@ -80,7 +80,7 @@ with col_c1:
     right_shrink_px = st.slider(
         "Shrink right logo height (pixels)",
         min_value=0,
-        max_value=100,
+        max_value=150,
         value=0,
         step=1,
         help="Use this to make the right logo visually smaller relative to the left, in 1-pixel increments.",
