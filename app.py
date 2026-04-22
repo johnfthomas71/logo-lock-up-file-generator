@@ -98,33 +98,19 @@ with u2:
         "Upload Right Logo", type=["png", "jpg", "jpeg"], key="r"
     )
 
-# --- STEP 3: CONTROLS FOR SIZE & SPACING ---
-st.subheader("3. Layout Controls")
-
-col_c1, col_c2 = st.columns(2)
-with col_c1:
-    right_shrink_px = st.slider(
-        "Shrink right logo height (pixels)",
-        min_value=0,
-        max_value=150,
-        value=0,
-        step=1,
+    # --- STEP 6 (moved): RIGHT LOGO COLOR MODE, directly under Upload Right Logo ---
+    st.subheader("6. Right Logo Color Mode")
+    right_color_mode = st.radio(
+        "Right logo color treatment",
+        ("Convert to white", "Maintain original image colors"),
+        index=0,
         help=(
-            "Use this to make the right logo visually smaller relative to the left, "
-            "in 1-pixel increments."
+            "Use 'Maintain original image colors' for brands that must stay in color "
+            "(for example, the Microsoft logo)."
         ),
     )
-with col_c2:
-    spacing_px = st.slider(
-        "Horizontal spacing between logos (pixels)",
-        min_value=0,
-        max_value=200,
-        value=50,
-        step=1,
-        help="Adjust the gap between the left and right logos.",
-    )
 
-# --- STEP 4: BACKGROUND SELECTION ---
+# --- STEP 4: BACKGROUND SELECTION (stays where it is) ---
 st.subheader("4. Background")
 
 bg_choice = st.radio(
@@ -152,7 +138,7 @@ else:
     canvas_bg = (0x00, 0x00, 0x00, 0x00)  # #00000000, fully transparent
     bg_label = "transparent"
 
-# --- STEP 5: FOREGROUND SENSITIVITY ---
+# --- STEP 5: FOREGROUND SENSITIVITY (stays where it is) ---
 st.subheader("5. Extraction Sensitivity")
 st.markdown(
     "Higher values keep fewer pixels (helps remove big white blocks); "
@@ -171,20 +157,7 @@ fg_threshold = st.slider(
     ),
 )
 
-# --- STEP 6: RIGHT LOGO COLOR MODE ---
-st.subheader("6. Right Logo Color Mode")
-
-right_color_mode = st.radio(
-    "Right logo color treatment",
-    ("Convert to white", "Maintain original image colors"),
-    index=0,
-    help=(
-        "Use 'Maintain original image colors' for brands that must stay in color "
-        "(for example, the Microsoft logo)."
-    ),
-)
-
-# --- Optional: mask debug view toggle ---
+# Optional: mask debug view toggle
 show_masks = st.checkbox(
     "Show extraction masks (debug view)",
     value=False,
@@ -194,7 +167,7 @@ show_masks = st.checkbox(
     ),
 )
 
-# --- STEP 7: PROCESSING HELPERS ---
+# --- PROCESSING HELPERS ---
 def scale_to_height(img: Image.Image, h: int) -> Image.Image:
     aspect = img.width / img.height
     return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
@@ -211,7 +184,33 @@ def pad_image(img: Image.Image, target_height: int, pad_color=(0, 0, 0, 0)) -> I
     new_img.paste(img, (0, pad_top), img)
     return new_img
 
-# --- STEP 8: MAIN PIPELINE ---
+# --- STEP 3 (moved): LAYOUT CONTROLS, now just above Final Preview ---
+st.subheader("3. Layout Controls")
+
+col_c1, col_c2 = st.columns(2)
+with col_c1:
+    right_shrink_px = st.slider(
+        "Shrink right logo height (pixels)",
+        min_value=0,
+        max_value=150,
+        value=0,
+        step=1,
+        help=(
+            "Use this to make the right logo visually smaller relative to the left, "
+            "in 1-pixel increments."
+        ),
+    )
+with col_c2:
+    spacing_px = st.slider(
+        "Horizontal spacing between logos (pixels)",
+        min_value=0,
+        max_value=200,
+        value=50,
+        step=1,
+        help="Adjust the gap between the left and right logos.",
+    )
+
+# --- MAIN PIPELINE + FINAL PREVIEW ---
 if file1 and file2:
     try:
         with st.spinner("Processing logos and building lockup…"):
@@ -261,7 +260,7 @@ if file1 and file2:
             with m2:
                 st.image(mask_b, caption="Right logo mask", use_column_width=True)
 
-        # Filename: include background label
+        # Filename: include background and right-logo mode
         n1 = comp1.lower().replace(" ", "_")
         n2 = comp2.lower().replace(" ", "_")
         mode_suffix = "color" if right_mode == "color" else "white"
