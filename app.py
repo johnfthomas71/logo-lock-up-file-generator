@@ -115,11 +115,11 @@ st.subheader("4. Background")
 bg_choice = st.radio(
     "Background color",
     (
+        "Transparent (#00000000)",
         "Black (#061621)",
         "Green (#023430)",
-        "Transparent (#00000000)",
     ),
-    index=0,
+    index=0,  # Transparent is now the default
     help=(
         "Choose the background. Logos remain pure white or in original color; "
         "the background fills only where there is no logo."
@@ -127,15 +127,15 @@ bg_choice = st.radio(
 )
 
 # Map radio choice to RGBA color AND label for filename/preview
-if bg_choice.startswith("Black"):
+if bg_choice.startswith("Transparent"):
+    canvas_bg = (0x00, 0x00, 0x00, 0x00)  # fully transparent
+    bg_label = "transparent"
+elif bg_choice.startswith("Black"):
     canvas_bg = (0x06, 0x16, 0x21, 255)  # #061621, fully opaque
     bg_label = "black"
-elif bg_choice.startswith("Green"):
+else:
     canvas_bg = (0x02, 0x34, 0x30, 255)  # #023430, fully opaque
     bg_label = "green"
-else:
-    canvas_bg = (0x00, 0x00, 0x00, 0x00)  # #00000000, fully transparent
-    bg_label = "transparent"
 
 # --- STEP 5: FOREGROUND SENSITIVITY ---
 st.subheader("5. Extraction Sensitivity")
