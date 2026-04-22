@@ -19,10 +19,13 @@ def estimate_bg_color(img: Image.Image) -> tuple:
     a = sum(p[3] for p in samples) // len(samples)
     return (r, g, b, a)
 
-def process_logo_pro(uploaded_file, threshold: int):
+def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
     """
-    Process a logo into a white-on-transparent image and return
-    both the processed logo and the binary mask used for extraction.
+    Process a logo into either:
+      - white-on-transparent ("white" mode), or
+      - original colors on transparent ("color" mode),
+
+    and return both the processed logo and the binary mask used for extraction.
     """
     # 1. Load image and ensure RGBA
     img = Image.open(uploaded_file).convert("RGBA")
@@ -50,17 +53,23 @@ def process_logo_pro(uploaded_file, threshold: int):
     r, g, b, a = img.split()
     combined_alpha = ImageChops.multiply(a, mask)
 
-    # 6. Create pure white logo with combined alpha
-    white_logo = Image.new("RGBA", img.size, (255, 255, 255, 0))
-    white_logo.putalpha(combined_alpha)
+    # 6. Build final logo depending on mode
+    if mode == "color":
+        # Preserve original RGB, only tighten alpha
+        logo = img.copy()
+        logo.putalpha(combined_alpha)
+    else:
+        # Default: pure white logo
+        logo = Image.new("RGBA", img.size, (255, 255, 255, 0))
+        logo.putalpha(combined_alpha)
 
     # 7. Trim empty space based on alpha
     bbox = combined_alpha.getbbox()
     if bbox:
-        white_logo = white_logo.crop(bbox)
+        logo = logo.crop(bbox)
         mask_preview = mask_preview.crop(bbox)
 
-    return white_logo, mask_preview
+    return logo, mask_preview
 
 # --- UI SETUP ---
 st.set_page_config(page_title="Logo Lockup Tool", layout="centered")
@@ -127,8 +136,8 @@ bg_choice = st.radio(
     ),
     index=0,
     help=(
-        "Choose the background. Logos remain pure white; the color fills only "
-        "where there is no logo."
+        "Choose the background. Logos remain pure white or in original color; "
+        "the background fills only where there is no logo."
     ),
 )
 
@@ -162,6 +171,20 @@ fg_threshold = st.slider(
     ),
 )
 
+# --- STEP 6: RIGHT LOGO COLOR MODE ---
+st.subheader("6. Right Logo Color Mode")
+
+right_color_mode = st.radio(
+    "Right logo color treatment",
+    ("Convert to white", "Maintain original image colors"),
+    index=0,
+    help=(
+        "Use 'Maintain original image colors' for brands that must stay in color "
+        "(for example, the Microsoft logo)."
+    ),
+)
+
+# --- Optional: mask debug view toggle ---
 show_masks = st.checkbox(
     "Show extraction masks (debug view)",
     value=False,
@@ -171,7 +194,7 @@ show_masks = st.checkbox(
     ),
 )
 
-# --- STEP 6: PROCESSING HELPERS ---
+# --- STEP 7: PROCESSING HELPERS ---
 def scale_to_height(img: Image.Image, h: int) -> Image.Image:
     aspect = img.width / img.height
     return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
@@ -188,15 +211,18 @@ def pad_image(img: Image.Image, target_height: int, pad_color=(0, 0, 0, 0)) -> I
     new_img.paste(img, (0, pad_top), img)
     return new_img
 
-# --- STEP 7: MAIN PIPELINE ---
+# --- STEP 8: MAIN PIPELINE ---
 if file1 and file2:
     try:
         with st.spinner("Processing logos and building lockup…"):
-            # Use user-controlled threshold for both logos
-            logo_a, mask_a = process_logo_pro(file1, fg_threshold)
-            logo_b, mask_b = process_logo_pro(file2, fg_threshold)
+            # Left logo: always converted to white
+            logo_a, mask_a = process_logo_pro(file1, fg_threshold, mode="white")
 
-            # Base artwork height from original logos
+            # Right logo: mode based on user selection
+            right_mode = "white" if right_color_mode.startswith("Convert") else "color"
+            logo_b, mask_b = process_logo_pro(file2, fg_threshold, mode=right_mode)
+
+            # Base artwork height from processed logos
             base_artwork_h = max(logo_a.height, logo_b.height)
 
             # Left logo stays at full base height
@@ -218,7 +244,7 @@ if file1 and file2:
             canvas_h = final_height
             canvas = Image.new("RGBA", (canvas_w, canvas_h), canvas_bg)
 
-            # Paste white logos using their alpha; background only shows where logos are transparent
+            # Paste logos using their alpha; background only shows where logos are transparent
             canvas.paste(l_final, (0, 0), l_final)
             canvas.paste(r_final, (l_final.width + spacing_px, 0), r_final)
 
@@ -238,7 +264,8 @@ if file1 and file2:
         # Filename: include background label
         n1 = comp1.lower().replace(" ", "_")
         n2 = comp2.lower().replace(" ", "_")
-        fname = f"{n1}_{n2}_{bg_label}_logo_lockup.png"
+        mode_suffix = "color" if right_mode == "color" else "white"
+        fname = f"{n1}_{n2}_{mode_suffix}_{bg_label}_logo_lockup.png"
 
         buf = io.BytesIO()
         canvas.save(buf, format="PNG")
