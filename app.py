@@ -71,14 +71,13 @@ def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
 
     return logo, mask_preview
 
-# --- UI SETUP ---
+# --- STEP 1: NAMES ---
 st.set_page_config(page_title="Logo Lockup Tool", layout="centered")
 st.title("🏗️ Professional Logo Lockup Generator")
 st.write(
     "This version uses **luminance masking + alpha blending** to keep logos solid and sharp."
 )
 
-# --- STEP 1: NAMES ---
 st.subheader("1. Company Names")
 col_n1, col_n2 = st.columns(2)
 with col_n1:
@@ -98,8 +97,8 @@ with u2:
         "Upload Right Logo", type=["png", "jpg", "jpeg"], key="r"
     )
 
-    # --- STEP 6 (moved): RIGHT LOGO COLOR MODE, directly under Upload Right Logo ---
-    st.subheader("6. Right Logo Color Mode")
+    # --- STEP 3 (moved): RIGHT LOGO COLOR MODE, directly under Upload Right Logo ---
+    st.subheader("3. Right Logo Color Mode")
     right_color_mode = st.radio(
         "Right logo color treatment",
         ("Convert to white", "Maintain original image colors"),
@@ -110,7 +109,7 @@ with u2:
         ),
     )
 
-# --- STEP 4: BACKGROUND SELECTION (stays where it is) ---
+# --- STEP 4: BACKGROUND SELECTION ---
 st.subheader("4. Background")
 
 bg_choice = st.radio(
@@ -138,7 +137,7 @@ else:
     canvas_bg = (0x00, 0x00, 0x00, 0x00)  # #00000000, fully transparent
     bg_label = "transparent"
 
-# --- STEP 5: FOREGROUND SENSITIVITY (stays where it is) ---
+# --- STEP 5: FOREGROUND SENSITIVITY ---
 st.subheader("5. Extraction Sensitivity")
 st.markdown(
     "Higher values keep fewer pixels (helps remove big white blocks); "
@@ -184,8 +183,8 @@ def pad_image(img: Image.Image, target_height: int, pad_color=(0, 0, 0, 0)) -> I
     new_img.paste(img, (0, pad_top), img)
     return new_img
 
-# --- STEP 3 (moved): LAYOUT CONTROLS, now just above Final Preview ---
-st.subheader("3. Layout Controls")
+# --- STEP 6 (moved): LAYOUT CONTROLS, now just above Final Preview ---
+st.subheader("6. Layout Controls")
 
 col_c1, col_c2 = st.columns(2)
 with col_c1:
