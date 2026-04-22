@@ -89,8 +89,8 @@ with col_c2:
     spacing_px = st.slider(
         "Horizontal spacing between logos (pixels)",
         min_value=0,
-        max_value=100,
-        value=15,
+        max_value=200,   # increased range
+        value=50,        # new default
         step=1,
         help="Adjust the gap between the left and right logos.",
     )
