@@ -23,7 +23,7 @@ def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
     """
     Process a logo into either:
       - white-on-transparent ("white" mode), or
-      - original colors on transparent ("color" mode),
+      - original colors on opaque background trimmed to artwork ("color" mode),
 
     and return both the processed logo and the binary mask used for extraction.
     """
@@ -39,37 +39,41 @@ def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
 
     # 4. Build luminance mask
     mask = diff.convert("L")
-
-    # Light blur to smooth edges without flooding the background
     mask = mask.filter(ImageFilter.GaussianBlur(radius=0.3))
-
-    # Apply user-controlled threshold
     mask = mask.point(lambda p: 0 if p < threshold else 255)
 
     # Keep a copy for debugging/preview
     mask_preview = mask.copy()
 
-    # 5. Combine with any existing alpha
+    # 5. Combine with any existing alpha to get a trim mask
     r, g, b, a = img.split()
     combined_alpha = ImageChops.multiply(a, mask)
 
-    # 6. Build final logo depending on mode
-    if mode == "color":
-        # Preserve original RGB, only tighten alpha
-        logo = img.copy()
-        logo.putalpha(combined_alpha)
-    else:
-        # Default: pure white logo
-        logo = Image.new("RGBA", img.size, (255, 255, 255, 0))
-        logo.putalpha(combined_alpha)
-
-    # 7. Trim empty space based on alpha
+    # 6. Find bounding box of non-transparent content
     bbox = combined_alpha.getbbox()
+
+    if mode == "color":
+        # COLOR MODE: use bbox only to trim; keep original colors, no holes
+        if bbox:
+            cropped = img.crop(bbox)          # original RGB
+            logo = cropped.convert("RGBA")
+            # Make entire cropped logo fully opaque
+            full_alpha = Image.new("L", logo.size, 255)
+            logo.putalpha(full_alpha)
+            mask_preview = mask_preview.crop(bbox)
+        else:
+            logo = img
+        return logo, mask_preview
+
+    # 7. WHITE MODE: your existing behavior, but applied after bbox
+    white_logo = Image.new("RGBA", img.size, (255, 255, 255, 0))
+    white_logo.putalpha(combined_alpha)
+
     if bbox:
-        logo = logo.crop(bbox)
+        white_logo = white_logo.crop(bbox)
         mask_preview = mask_preview.crop(bbox)
 
-    return logo, mask_preview
+    return white_logo, mask_preview
 
 # --- STEP 1: NAMES ---
 st.set_page_config(page_title="Logo Lockup Tool", layout="centered")
