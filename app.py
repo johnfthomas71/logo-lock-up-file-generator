@@ -71,14 +71,13 @@ def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
 
     return logo, mask_preview
 
-# --- UI SETUP ---
+# --- STEP 1: NAMES ---
 st.set_page_config(page_title="Logo Lockup Tool", layout="centered")
 st.title("🏗️ Professional Logo Lockup Generator")
 st.write(
     "This version uses **luminance masking + alpha blending** to keep logos solid and sharp."
 )
 
-# --- STEP 1: NAMES ---
 st.subheader("1. Company Names")
 col_n1, col_n2 = st.columns(2)
 with col_n1:
@@ -98,8 +97,94 @@ with u2:
         "Upload Right Logo", type=["png", "jpg", "jpeg"], key="r"
     )
 
-# --- STEP 3: CONTROLS FOR SIZE & SPACING ---
-st.subheader("3. Layout Controls")
+    # --- STEP 3 (moved): RIGHT LOGO COLOR MODE, directly under Upload Right Logo ---
+    st.subheader("3. Right Logo Color Mode")
+    right_color_mode = st.radio(
+        "Right logo color treatment",
+        ("Convert to white", "Maintain original image colors"),
+        index=0,
+        help=(
+            "Use 'Maintain original image colors' for brands that must stay in color "
+            "(for example, the Microsoft logo)."
+        ),
+    )
+
+# --- STEP 4: BACKGROUND SELECTION ---
+st.subheader("4. Background")
+
+bg_choice = st.radio(
+    "Background color",
+    (
+        "Transparent (#00000000)",
+        "Black (#061621)",
+        "Green (#023430)",
+    ),
+    index=0,  # Transparent is now the default
+    help=(
+        "Choose the background. Logos remain pure white or in original color; "
+        "the background fills only where there is no logo."
+    ),
+)
+
+# Map radio choice to RGBA color AND label for filename/preview
+if bg_choice.startswith("Transparent"):
+    canvas_bg = (0x00, 0x00, 0x00, 0x00)  # fully transparent
+    bg_label = "transparent"
+elif bg_choice.startswith("Black"):
+    canvas_bg = (0x06, 0x16, 0x21, 255)  # #061621, fully opaque
+    bg_label = "black"
+else:
+    canvas_bg = (0x02, 0x34, 0x30, 255)  # #023430, fully opaque
+    bg_label = "green"
+
+# --- STEP 5: FOREGROUND SENSITIVITY ---
+st.subheader("5. Extraction Sensitivity")
+st.markdown(
+    "Higher values keep fewer pixels (helps remove big white blocks); "
+    "lower values keep more (helps preserve faint edges)."
+)
+
+fg_threshold = st.slider(
+    "Foreground sensitivity (threshold)",
+    min_value=10,
+    max_value=80,
+    value=40,
+    step=1,
+    help=(
+        "Controls how different a pixel must be from the original background to be kept. "
+        "Increase this if you see a big white box; decrease if fine logo details disappear."
+    ),
+)
+
+# Optional: mask debug view toggle
+show_masks = st.checkbox(
+    "Show extraction masks (debug view)",
+    value=False,
+    help=(
+        "When enabled, shows the binary masks used to cut the logos out of their "
+        "original backgrounds."
+    ),
+)
+
+# --- PROCESSING HELPERS ---
+def scale_to_height(img: Image.Image, h: int) -> Image.Image:
+    aspect = img.width / img.height
+    return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
+
+def pad_image(img: Image.Image, target_height: int, pad_color=(0, 0, 0, 0)) -> Image.Image:
+    """Pad image vertically to target height, centering the content."""
+    w, h = img.size
+    if h >= target_height:
+        return img
+    pad_total = target_height - h
+    pad_top = pad_total // 2
+    pad_bottom = pad_total - pad_top
+    new_img = Image.new("RGBA", (w, target_height), pad_color)
+    new_img.paste(img, (0, pad_top), img)
+    return new_img
+
+# --- STEP 6 (moved): LAYOUT CONTROLS, now just above Final Preview ---
+st.subheader("6. Layout Controls")
 
 col_c1, col_c2 = st.columns(2)
 with col_c1:
@@ -124,94 +209,7 @@ with col_c2:
         help="Adjust the gap between the left and right logos.",
     )
 
-# --- STEP 4: BACKGROUND SELECTION ---
-st.subheader("4. Background")
-
-bg_choice = st.radio(
-    "Background color",
-    (
-        "Black (#061621)",
-        "Green (#023430)",
-        "Transparent (#00000000)",
-    ),
-    index=0,
-    help=(
-        "Choose the background. Logos remain pure white or in original color; "
-        "the background fills only where there is no logo."
-    ),
-)
-
-# Map radio choice to RGBA color AND label for filename/preview
-if bg_choice.startswith("Black"):
-    canvas_bg = (0x06, 0x16, 0x21, 255)  # #061621, fully opaque
-    bg_label = "black"
-elif bg_choice.startswith("Green"):
-    canvas_bg = (0x02, 0x34, 0x30, 255)  # #023430, fully opaque
-    bg_label = "green"
-else:
-    canvas_bg = (0x00, 0x00, 0x00, 0x00)  # #00000000, fully transparent
-    bg_label = "transparent"
-
-# --- STEP 5: FOREGROUND SENSITIVITY ---
-st.subheader("5. Extraction Sensitivity")
-st.markdown(
-    "Higher values keep fewer pixels (helps remove big white blocks); "
-    "lower values keep more (helps preserve faint edges)."
-)
-
-fg_threshold = st.slider(
-    "Foreground sensitivity (threshold)",
-    min_value=10,
-    max_value=80,
-    value=40,
-    step=1,
-    help=(
-        "Controls how different a pixel must be from the original background to be kept. "
-        "Increase this if you see a big white box; decrease if fine logo details disappear."
-    ),
-)
-
-# --- STEP 6: RIGHT LOGO COLOR MODE ---
-st.subheader("6. Right Logo Color Mode")
-
-right_color_mode = st.radio(
-    "Right logo color treatment",
-    ("Convert to white", "Maintain original image colors"),
-    index=0,
-    help=(
-        "Use 'Maintain original image colors' for brands that must stay in color "
-        "(for example, the Microsoft logo)."
-    ),
-)
-
-# --- Optional: mask debug view toggle ---
-show_masks = st.checkbox(
-    "Show extraction masks (debug view)",
-    value=False,
-    help=(
-        "When enabled, shows the binary masks used to cut the logos out of their "
-        "original backgrounds."
-    ),
-)
-
-# --- STEP 7: PROCESSING HELPERS ---
-def scale_to_height(img: Image.Image, h: int) -> Image.Image:
-    aspect = img.width / img.height
-    return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
-
-def pad_image(img: Image.Image, target_height: int, pad_color=(0, 0, 0, 0)) -> Image.Image:
-    """Pad image vertically to target height, centering the content."""
-    w, h = img.size
-    if h >= target_height:
-        return img
-    pad_total = target_height - h
-    pad_top = pad_total // 2
-    pad_bottom = pad_total - pad_top
-    new_img = Image.new("RGBA", (w, target_height), pad_color)
-    new_img.paste(img, (0, pad_top), img)
-    return new_img
-
-# --- STEP 8: MAIN PIPELINE ---
+# --- MAIN PIPELINE + FINAL PREVIEW ---
 if file1 and file2:
     try:
         with st.spinner("Processing logos and building lockup…"):
@@ -261,7 +259,7 @@ if file1 and file2:
             with m2:
                 st.image(mask_b, caption="Right logo mask", use_column_width=True)
 
-        # Filename: include background label
+        # Filename: include background and right-logo mode
         n1 = comp1.lower().replace(" ", "_")
         n2 = comp2.lower().replace(" ", "_")
         mode_suffix = "color" if right_mode == "color" else "white"
