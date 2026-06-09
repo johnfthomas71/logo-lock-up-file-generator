@@ -1,6 +1,8 @@
+import io
+
 import streamlit as st
 from PIL import Image, ImageChops, ImageFilter
-import io
+
 
 def estimate_bg_color(img: Image.Image) -> tuple:
     """Estimate background color by sampling the four corners."""
@@ -19,12 +21,12 @@ def estimate_bg_color(img: Image.Image) -> tuple:
     a = sum(p[3] for p in samples) // len(samples)
     return (r, g, b, a)
 
+
 def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
     """
     Process a logo into either:
       - white-on-transparent ("white" mode), or
       - original colors on opaque background trimmed to artwork ("color" mode),
-
     and return both the processed logo and the binary mask used for extraction.
     """
     # 1. Load image and ensure RGBA
@@ -46,7 +48,7 @@ def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
     mask_preview = mask.copy()
 
     # 5. Combine with any existing alpha to get a trim mask
-    r, g, b, a = img.split()
+    _, _, _, a = img.split()
     combined_alpha = ImageChops.multiply(a, mask)
 
     # 6. Find bounding box of non-transparent content
@@ -55,8 +57,9 @@ def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
     if mode == "color":
         # COLOR MODE: use bbox only to trim; keep original colors, no holes
         if bbox:
-            cropped = img.crop(bbox)          # original RGB
+            cropped = img.crop(bbox)
             logo = cropped.convert("RGBA")
+
             # Make entire cropped logo fully opaque
             full_alpha = Image.new("L", logo.size, 255)
             logo.putalpha(full_alpha)
@@ -65,7 +68,7 @@ def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
             logo = img
         return logo, mask_preview
 
-    # 7. WHITE MODE: your existing behavior, but applied after bbox
+    # 7. WHITE MODE: existing behavior, applied after bbox
     white_logo = Image.new("RGBA", img.size, (255, 255, 255, 0))
     white_logo.putalpha(combined_alpha)
 
@@ -75,34 +78,59 @@ def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
 
     return white_logo, mask_preview
 
-# --- STEP 1: NAMES ---
+
+def scale_to_height(img: Image.Image, h: int) -> Image.Image:
+    aspect = img.width / img.height
+    return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
+
+
+def pad_image(img: Image.Image, target_height: int, pad_color=(0, 0, 0, 0)) -> Image.Image:
+    """Pad image vertically to target height, centering the content."""
+    w, h = img.size
+    if h >= target_height:
+        return img
+
+    pad_total = target_height - h
+    pad_top = pad_total // 2
+    new_img = Image.new("RGBA", (w, target_height), pad_color)
+    new_img.paste(img, (0, pad_top), img)
+    return new_img
+
+
+# --- UI SETUP ---
 st.set_page_config(page_title="Logo Lockup Tool", layout="centered")
 st.title("🏗️ Professional Logo Lockup Generator")
 st.write(
     "This version uses **luminance masking + alpha blending** to keep logos solid and sharp."
 )
 
+# --- STEP 1: NAMES ---
 st.subheader("1. Company Names")
 col_n1, col_n2 = st.columns(2)
 with col_n1:
     comp1 = st.text_input("Left Company", value="MongoDB")
 with col_n2:
-    comp2 = st.text_input("Right Company", value="Company Name")
+    comp2 = st.text_input("Right Company", value="", placeholder="Company Name")
 
 # --- STEP 2: UPLOADS ---
 st.subheader("2. Upload Logos")
 u1, u2 = st.columns(2)
 with u1:
-    file1 = st.file_uploader(
-        "Upload Left Logo", type=["png", "jpg", "jpeg"], key="l"
-    )
-with u2:
-    file2 = st.file_uploader(
-        "Upload Right Logo", type=["png", "jpg", "jpeg"], key="r"
+    file1 = st.file_uploader("Upload Left Logo", type=["png", "jpg", "jpeg"], key="l")
+    st.subheader("3. Left Logo Color Mode")
+    left_color_mode = st.radio(
+        "Left logo color treatment",
+        ("Convert to white", "Maintain original image colors"),
+        index=0,
+        help=(
+            "Use 'Maintain original image colors' for brands that must stay in color."
+        ),
+        key="left_color_mode",
     )
 
-    # --- STEP 3 (moved): RIGHT LOGO COLOR MODE, directly under Upload Right Logo ---
-    st.subheader("3. Right Logo Color Mode")
+with u2:
+    file2 = st.file_uploader("Upload Right Logo", type=["png", "jpg", "jpeg"], key="r")
+    st.subheader("4. Right Logo Color Mode")
     right_color_mode = st.radio(
         "Right logo color treatment",
         ("Convert to white", "Maintain original image colors"),
@@ -111,11 +139,11 @@ with u2:
             "Use 'Maintain original image colors' for brands that must stay in color "
             "(for example, the Microsoft logo)."
         ),
+        key="right_color_mode",
     )
 
-# --- STEP 4: BACKGROUND SELECTION ---
-st.subheader("4. Background")
-
+# --- STEP 5: BACKGROUND SELECTION ---
+st.subheader("5. Background")
 bg_choice = st.radio(
     "Background color",
     (
@@ -123,7 +151,7 @@ bg_choice = st.radio(
         "Black (#061621)",
         "Green (#023430)",
     ),
-    index=0,  # Transparent is now the default
+    index=0,
     help=(
         "Choose the background. Logos remain pure white or in original color; "
         "the background fills only where there is no logo."
@@ -132,22 +160,21 @@ bg_choice = st.radio(
 
 # Map radio choice to RGBA color AND label for filename/preview
 if bg_choice.startswith("Transparent"):
-    canvas_bg = (0x00, 0x00, 0x00, 0x00)  # fully transparent
+    canvas_bg = (0x00, 0x00, 0x00, 0x00)
     bg_label = "transparent"
 elif bg_choice.startswith("Black"):
-    canvas_bg = (0x06, 0x16, 0x21, 255)  # #061621, fully opaque
+    canvas_bg = (0x06, 0x16, 0x21, 255)
     bg_label = "black"
 else:
-    canvas_bg = (0x02, 0x34, 0x30, 255)  # #023430, fully opaque
+    canvas_bg = (0x02, 0x34, 0x30, 255)
     bg_label = "green"
 
-# --- STEP 5: FOREGROUND SENSITIVITY ---
-st.subheader("5. Extraction Sensitivity")
+# --- STEP 6: FOREGROUND SENSITIVITY ---
+st.subheader("6. Extraction Sensitivity")
 st.markdown(
     "Higher values keep fewer pixels (helps remove big white blocks); "
     "lower values keep more (helps preserve faint edges)."
 )
-
 fg_threshold = st.slider(
     "Foreground sensitivity (threshold)",
     min_value=10,
@@ -160,7 +187,6 @@ fg_threshold = st.slider(
     ),
 )
 
-# Optional: mask debug view toggle
 show_masks = st.checkbox(
     "Show extraction masks (debug view)",
     value=False,
@@ -170,26 +196,8 @@ show_masks = st.checkbox(
     ),
 )
 
-# --- PROCESSING HELPERS ---
-def scale_to_height(img: Image.Image, h: int) -> Image.Image:
-    aspect = img.width / img.height
-    return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
-
-def pad_image(img: Image.Image, target_height: int, pad_color=(0, 0, 0, 0)) -> Image.Image:
-    """Pad image vertically to target height, centering the content."""
-    w, h = img.size
-    if h >= target_height:
-        return img
-    pad_total = target_height - h
-    pad_top = pad_total // 2
-    pad_bottom = pad_total - pad_top
-    new_img = Image.new("RGBA", (w, target_height), pad_color)
-    new_img.paste(img, (0, pad_top), img)
-    return new_img
-
-# --- STEP 6 (moved): LAYOUT CONTROLS, now just above Final Preview ---
-st.subheader("6. Layout Controls")
-
+# --- STEP 7: LAYOUT CONTROLS ---
+st.subheader("7. Layout Controls")
 col_c1, col_c2 = st.columns(2)
 with col_c1:
     right_shrink_px = st.slider(
@@ -217,11 +225,14 @@ with col_c2:
 if file1 and file2:
     try:
         with st.spinner("Processing logos and building lockup…"):
-            # Left logo: always converted to white
-            logo_a, mask_a = process_logo_pro(file1, fg_threshold, mode="white")
+            left_mode = (
+                "white" if left_color_mode.startswith("Convert") else "color"
+            )
+            right_mode = (
+                "white" if right_color_mode.startswith("Convert") else "color"
+            )
 
-            # Right logo: mode based on user selection
-            right_mode = "white" if right_color_mode.startswith("Convert") else "color"
+            logo_a, mask_a = process_logo_pro(file1, fg_threshold, mode=left_mode)
             logo_b, mask_b = process_logo_pro(file2, fg_threshold, mode=right_mode)
 
             # Base artwork height from processed logos
@@ -237,7 +248,6 @@ if file1 and file2:
             # Final canvas height = max of scaled heights + padding
             PAD_PIXELS = 6
             final_height = max(l_scaled.height, r_scaled.height) + 2 * PAD_PIXELS
-
             l_final = pad_image(l_scaled, final_height)
             r_final = pad_image(r_scaled, final_height)
 
@@ -250,11 +260,9 @@ if file1 and file2:
             canvas.paste(l_final, (0, 0), l_final)
             canvas.paste(r_final, (l_final.width + spacing_px, 0), r_final)
 
-        # Preview header reflects chosen background
         st.markdown(f"### Final Preview – {bg_label.capitalize()} background")
         st.container(border=True).image(canvas)
 
-        # Optional: show mask debug view
         if show_masks:
             st.subheader("Mask Debug View")
             m1, m2 = st.columns(2)
@@ -263,11 +271,13 @@ if file1 and file2:
             with m2:
                 st.image(mask_b, caption="Right logo mask", use_column_width=True)
 
-        # Filename: include background and right-logo mode
         n1 = comp1.lower().replace(" ", "_")
         n2 = comp2.lower().replace(" ", "_")
-        mode_suffix = "color" if right_mode == "color" else "white"
-        fname = f"{n1}_{n2}_{mode_suffix}_{bg_label}_logo_lockup.png"
+        left_mode_suffix = "color" if left_mode == "color" else "white"
+        right_mode_suffix = "color" if right_mode == "color" else "white"
+        fname = (
+            f"{n1}_{n2}_{left_mode_suffix}_{right_mode_suffix}_{bg_label}_logo_lockup.png"
+        )
 
         buf = io.BytesIO()
         canvas.save(buf, format="PNG")
@@ -279,6 +289,5 @@ if file1 and file2:
             file_name=fname,
             mime="image/png",
         )
-
     except Exception as e:
         st.error(f"Error: {e}")
