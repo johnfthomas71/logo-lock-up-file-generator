@@ -301,5 +301,6 @@ if file1 and file2:
             file_name=fname,
             mime="image/png",
         )
+     
  except Exception as e:
         st.error(f"Error: {e}")
