@@ -1,9 +1,9 @@
 import io
- 
+
 import streamlit as st
 from PIL import Image, ImageChops, ImageFilter
- 
- 
+
+
 def estimate_bg_color(img: Image.Image) -> tuple:
     """Estimate background color by sampling the four corners."""
     img = img.convert("RGBA")
@@ -20,8 +20,8 @@ def estimate_bg_color(img: Image.Image) -> tuple:
     b = sum(p[2] for p in samples) // len(samples)
     a = sum(p[3] for p in samples) // len(samples)
     return (r, g, b, a)
- 
- 
+
+
 def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
     """
     Process a logo into either:
@@ -31,35 +31,35 @@ def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
     """
     # 1. Load image and ensure RGBA
     img = Image.open(uploaded_file).convert("RGBA")
- 
+
     # 2. Estimate background color from corners
     bg_color = estimate_bg_color(img)
- 
+
     # 3. Difference from background color
     bg_img = Image.new("RGBA", img.size, bg_color)
     diff = ImageChops.difference(img, bg_img)
- 
+
     # 4. Build luminance mask
     mask = diff.convert("L")
     mask = mask.filter(ImageFilter.GaussianBlur(radius=0.3))
     mask = mask.point(lambda p: 0 if p < threshold else 255)
- 
+
     # Keep a copy for debugging/preview
     mask_preview = mask.copy()
- 
+
     # 5. Combine with any existing alpha to get a trim mask
     _, _, _, a = img.split()
     combined_alpha = ImageChops.multiply(a, mask)
- 
+
     # 6. Find bounding box of non-transparent content
     bbox = combined_alpha.getbbox()
- 
+
     if mode == "color":
         # COLOR MODE: use bbox only to trim; keep original colors, no holes
         if bbox:
             cropped = img.crop(bbox)
             logo = cropped.convert("RGBA")
- 
+
             # Make entire cropped logo fully opaque
             full_alpha = Image.new("L", logo.size, 255)
             logo.putalpha(full_alpha)
@@ -67,30 +67,30 @@ def process_logo_pro(uploaded_file, threshold: int, mode: str = "white"):
         else:
             logo = img
         return logo, mask_preview
- 
+
     # 7. WHITE MODE: existing behavior, applied after bbox
     white_logo = Image.new("RGBA", img.size, (255, 255, 255, 0))
     white_logo.putalpha(combined_alpha)
- 
+
     if bbox:
         white_logo = white_logo.crop(bbox)
         mask_preview = mask_preview.crop(bbox)
- 
+
     return white_logo, mask_preview
- 
- 
+
+
 def scale_to_height(img: Image.Image, h: int) -> Image.Image:
     aspect = img.width / img.height
     return img.resize((int(h * aspect), h), Image.Resampling.LANCZOS)
- 
- 
+
+
 # --- UI SETUP ---
 st.set_page_config(page_title="Logo Lockup Tool", layout="centered")
 st.title("🏗️ Professional Logo Lockup Generator")
 st.write(
     "This version uses **luminance masking + alpha blending** to keep logos solid and sharp."
 )
- 
+
 # --- STEP 1: NAMES ---
 st.subheader("1. Company Names")
 col_n1, col_n2 = st.columns(2)
@@ -98,7 +98,7 @@ with col_n1:
     comp1 = st.text_input("Left Company", value="MongoDB")
 with col_n2:
     comp2 = st.text_input("Right Company", value="", placeholder="Company Name")
- 
+
 # --- STEP 2: UPLOADS ---
 st.subheader("2. Upload Logos")
 u1, u2 = st.columns(2)
@@ -114,7 +114,7 @@ with u1:
         ),
         key="left_color_mode",
     )
- 
+
 with u2:
     file2 = st.file_uploader("Upload Right Logo", type=["png", "jpg", "jpeg"], key="r")
     st.subheader("4. Right Logo Color Mode")
@@ -128,7 +128,7 @@ with u2:
         ),
         key="right_color_mode",
     )
- 
+
 # --- STEP 5: BACKGROUND SELECTION ---
 st.subheader("5. Background")
 bg_choice = st.radio(
@@ -144,7 +144,7 @@ bg_choice = st.radio(
         "the background fills only where there is no logo."
     ),
 )
- 
+
 # Map radio choice to RGBA color AND label for filename/preview
 if bg_choice.startswith("Transparent"):
     canvas_bg = (0x00, 0x00, 0x00, 0x00)
@@ -155,7 +155,7 @@ elif bg_choice.startswith("Black"):
 else:
     canvas_bg = (0x02, 0x34, 0x30, 255)
     bg_label = "green"
- 
+
 # --- STEP 6: FOREGROUND SENSITIVITY ---
 st.subheader("6. Extraction Sensitivity")
 st.markdown(
@@ -173,7 +173,7 @@ fg_threshold = st.slider(
         "Increase this if you see a big white box; decrease if fine logo details disappear."
     ),
 )
- 
+
 show_masks = st.checkbox(
     "Show extraction masks (debug view)",
     value=False,
@@ -182,7 +182,7 @@ show_masks = st.checkbox(
         "original backgrounds."
     ),
 )
- 
+
 # --- STEP 7: LAYOUT CONTROLS ---
 st.subheader("7. Layout Controls")
 col_c1, col_c2 = st.columns(2)
@@ -207,7 +207,7 @@ with col_c2:
         step=1,
         help="Adjust the gap between the left and right logos.",
     )
- 
+
 right_offset_px = st.slider(
     "Move right logo vertically (pixels)",
     min_value=-100,
@@ -219,7 +219,7 @@ right_offset_px = st.slider(
         "vertically centered position. The canvas grows as needed so nothing is clipped."
     ),
 )
- 
+
 # --- MAIN PIPELINE + FINAL PREVIEW ---
 if file1 and file2:
     try:
@@ -230,31 +230,31 @@ if file1 and file2:
             right_mode = (
                 "white" if right_color_mode.startswith("Convert") else "color"
             )
- 
+
             logo_a, mask_a = process_logo_pro(file1, fg_threshold, mode=left_mode)
             logo_b, mask_b = process_logo_pro(file2, fg_threshold, mode=right_mode)
- 
+
             # Base artwork height from processed logos
             base_artwork_h = max(logo_a.height, logo_b.height)
- 
+
             # Left logo stays at full base height
             l_scaled = scale_to_height(logo_a, base_artwork_h)
- 
+
             # Right logo can be shrunk by N pixels (but never below 1px)
             r_target_h = max(1, base_artwork_h - right_shrink_px)
             r_scaled = scale_to_height(logo_b, r_target_h)
- 
+
             # Default vertical positions: both logos centered within the content
             # band, with PAD_PIXELS above and below (same as the original layout).
             PAD_PIXELS = 6
             content_h = max(l_scaled.height, r_scaled.height)
             l_y = PAD_PIXELS + (content_h - l_scaled.height) // 2
             r_y = PAD_PIXELS + (content_h - r_scaled.height) // 2
- 
+
             # Apply the user's vertical offset to the right logo only
             # (negative = up, positive = down).
             r_y += right_offset_px
- 
+
             # Grow the canvas so a shifted logo is never clipped. With a zero
             # offset this reduces to content_h + 2 * PAD_PIXELS.
             top_edge = min(l_y, r_y)
@@ -263,18 +263,18 @@ if file1 and file2:
             l_y += shift
             r_y += shift
             canvas_h = bottom_edge + shift + PAD_PIXELS
- 
+
             # Canvas with chosen background color and adjustable horizontal spacing
             canvas_w = l_scaled.width + spacing_px + r_scaled.width
             canvas = Image.new("RGBA", (canvas_w, canvas_h), canvas_bg)
- 
+
             # Paste logos using their alpha; background only shows where logos are transparent
             canvas.paste(l_scaled, (0, l_y), l_scaled)
             canvas.paste(r_scaled, (l_scaled.width + spacing_px, r_y), r_scaled)
- 
+
         st.markdown(f"### Final Preview – {bg_label.capitalize()} background")
         st.container(border=True).image(canvas)
- 
+
         if show_masks:
             st.subheader("Mask Debug View")
             m1, m2 = st.columns(2)
@@ -282,7 +282,7 @@ if file1 and file2:
                 st.image(mask_a, caption="Left logo mask", use_column_width=True)
             with m2:
                 st.image(mask_b, caption="Right logo mask", use_column_width=True)
- 
+
         n1 = comp1.lower().replace(" ", "_")
         n2 = comp2.lower().replace(" ", "_")
         left_mode_suffix = "color" if left_mode == "color" else "white"
@@ -290,17 +290,16 @@ if file1 and file2:
         fname = (
             f"{n1}_{n2}_{left_mode_suffix}_{right_mode_suffix}_{bg_label}_logo_lockup.png"
         )
- 
+
         buf = io.BytesIO()
         canvas.save(buf, format="PNG")
         buf.seek(0)
- 
+
         st.download_button(
             label=f"Download {fname}",
             data=buf.getvalue(),
             file_name=fname,
             mime="image/png",
         )
-     
- except Exception as e:
+    except Exception as e:
         st.error(f"Error: {e}")
